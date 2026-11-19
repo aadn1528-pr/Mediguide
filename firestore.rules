@@ -1,0 +1,431 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Reusable Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'hashirngr@gmail.com' ||
+        request.auth.token.email == 'aadn1528@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isRegisteredDoctor() {
+      return isVerified() && exists(/databases/$(database)/documents/doctors/$(request.auth.uid));
+    }
+
+    function isLocalizedText(obj) {
+      return obj is map
+        && obj.keys().hasAll(['en', 'ta', 'hi'])
+        && obj.keys().hasOnly(['en', 'ta', 'hi'])
+        && obj.en is string && obj.en.size() <= 2500
+        && obj.ta is string && obj.ta.size() <= 2500
+        && obj.hi is string && obj.hi.size() <= 2500;
+    }
+
+    function isLocalizedBullets(obj) {
+      return obj is map
+        && obj.keys().hasAll(['en', 'ta', 'hi'])
+        && obj.keys().hasOnly(['en', 'ta', 'hi'])
+        && obj.en is list && obj.en.size() <= 10 && (obj.en.size() == 0 || (obj.en[0] is string && obj.en[0].size() <= 600))
+        && obj.ta is list && obj.ta.size() <= 10 && (obj.ta.size() == 0 || (obj.ta[0] is string && obj.ta[0].size() <= 600))
+        && obj.hi is list && obj.hi.size() <= 10 && (obj.hi.size() == 0 || (obj.hi[0] is string && obj.hi[0].size() <= 600));
+    }
+
+    function isValidDoctorResponse(resp) {
+      return resp is map
+        && resp.keys().hasAll(['doctorName', 'specialty', 'respondedAt', 'clinicalNote', 'followUpTimeframe'])
+        && resp.keys().hasOnly(['doctorName', 'specialty', 'respondedAt', 'clinicalNote', 'followUpTimeframe'])
+        && resp.doctorName is string && resp.doctorName.size() >= 1 && resp.doctorName.size() <= 120
+        && resp.specialty is string && resp.specialty.size() >= 1 && resp.specialty.size() <= 120
+        && resp.respondedAt is string && resp.respondedAt.size() >= 1 && resp.respondedAt.size() <= 60
+        && resp.clinicalNote is string && resp.clinicalNote.size() >= 1 && resp.clinicalNote.size() <= 8000
+        && resp.followUpTimeframe is string && resp.followUpTimeframe.size() >= 1 && resp.followUpTimeframe.size() <= 120;
+    }
+
+    function isValidAttachment(att, ownerUid) {
+      return att is map
+        && att.keys().hasAll(['fileName', 'mimeType', 'sizeBytes', 'storagePath', 'downloadUrl'])
+        && att.keys().hasOnly(['fileName', 'mimeType', 'sizeBytes', 'storagePath', 'downloadUrl'])
+        && att.fileName is string && att.fileName.size() >= 1 && att.fileName.size() <= 200
+        && att.mimeType is string && att.mimeType in ['image/png', 'image/jpeg', 'image/webp', 'application/pdf']
+        && att.sizeBytes is int && att.sizeBytes >= 1 && att.sizeBytes <= 12582912
+        && att.storagePath is string && att.storagePath.size() >= 1 && att.storagePath.size() <= 500
+        && att.storagePath.matches('^users/' + ownerUid + '/reports/[a-zA-Z0-9_\\-]+/.+$')
+        && att.downloadUrl is string && att.downloadUrl.size() >= 1 && att.downloadUrl.size() <= 2000;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'role', 'preferredLanguage', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'preferredLanguage', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.photoURL is string && data.photoURL.size() <= 500
+        && data.role is string && data.role in ['patient']
+        && data.preferredLanguage is string && data.preferredLanguage in ['en', 'ta', 'hi']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDoctorPrivateProfile(data) {
+      return data.keys().hasAll(['uid', 'doctorName', 'specialty', 'clinicName', 'licenseNumber', 'acceptingCases', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'doctorName', 'specialty', 'clinicName', 'licenseNumber', 'acceptingCases', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.doctorName is string && data.doctorName.size() >= 1 && data.doctorName.size() <= 120
+        && data.specialty is string && data.specialty.size() >= 1 && data.specialty.size() <= 120
+        && data.clinicName is string && data.clinicName.size() >= 1 && data.clinicName.size() <= 150
+        && data.licenseNumber is string && data.licenseNumber.size() >= 2 && data.licenseNumber.size() <= 64
+        && data.acceptingCases is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDoctorDirectoryEntry(data) {
+      return data.keys().hasAll(['uid', 'doctorName', 'specialty', 'clinicName', 'acceptingCases', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'doctorName', 'specialty', 'clinicName', 'acceptingCases', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.doctorName is string && data.doctorName.size() >= 1 && data.doctorName.size() <= 120
+        && data.specialty is string && data.specialty.size() >= 1 && data.specialty.size() <= 120
+        && data.clinicName is string && data.clinicName.size() >= 1 && data.clinicName.size() <= 150
+        && data.acceptingCases is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLabReport(data) {
+      return data.keys().hasAll([
+          'ownerId', 'presetKey', 'title', 'reportDate', 'patientLabel',
+          'summaryBullets', 'priority', 'priorityReason', 'recommendedSpecialist',
+          'specialistRationale', 'numericMarkers', 'cultureFindings',
+          'rawReportText', 'sourceType', 'patientNotes', 'handoffStatus',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'presetKey', 'title', 'reportDate', 'patientLabel',
+          'summaryBullets', 'priority', 'priorityReason', 'recommendedSpecialist',
+          'specialistRationale', 'numericMarkers', 'cultureFindings',
+          'rawReportText', 'sourceType', 'patientNotes', 'handoffStatus',
+          'doctorResponse', 'attachment', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.ownerId)
+        && data.presetKey is string && data.presetKey.size() <= 64
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.reportDate is string && data.reportDate.size() >= 1 && data.reportDate.size() <= 60
+        && data.patientLabel is string && data.patientLabel.size() >= 1 && data.patientLabel.size() <= 120
+        && isLocalizedBullets(data.summaryBullets)
+        && data.priority is string && data.priority in ['Routine', 'Follow-Up Recommended', 'Prompt Doctor Review']
+        && isLocalizedText(data.priorityReason)
+        && data.recommendedSpecialist is string && data.recommendedSpecialist.size() >= 1 && data.recommendedSpecialist.size() <= 120
+        && isLocalizedText(data.specialistRationale)
+        && data.numericMarkers is list && data.numericMarkers.size() <= 60
+        && (data.numericMarkers.size() == 0 || data.numericMarkers[0] is map)
+        && data.cultureFindings is list && data.cultureFindings.size() <= 15
+        && (data.cultureFindings.size() == 0 || data.cultureFindings[0] is map)
+        && data.rawReportText is string && data.rawReportText.size() <= 50000
+        && data.sourceType is string && data.sourceType in ['preset', 'text', 'file']
+        && data.patientNotes is string && data.patientNotes.size() <= 5000
+        && data.handoffStatus is string && data.handoffStatus in ['idle', 'sent', 'under_review', 'completed']
+        && (!('doctorResponse' in data) || isValidDoctorResponse(data.doctorResponse))
+        && (!('attachment' in data) || isValidAttachment(data.attachment, data.ownerId))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClinicalHandoff(data) {
+      return data.keys().hasAll([
+          'patientUid', 'assignedDoctorUid', 'reportId', 'title', 'reportDate',
+          'patientLabel', 'priority', 'recommendedSpecialist', 'numericMarkers',
+          'cultureFindings', 'patientNotes', 'handoffStatus', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'patientUid', 'assignedDoctorUid', 'reportId', 'title', 'reportDate',
+          'patientLabel', 'priority', 'recommendedSpecialist', 'numericMarkers',
+          'cultureFindings', 'patientNotes', 'handoffStatus', 'doctorResponse',
+          'attachment', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.patientUid)
+        && isValidId(data.assignedDoctorUid)
+        && isValidId(data.reportId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.reportDate is string && data.reportDate.size() >= 1 && data.reportDate.size() <= 60
+        && data.patientLabel is string && data.patientLabel.size() >= 1 && data.patientLabel.size() <= 120
+        && data.priority is string && data.priority in ['Routine', 'Follow-Up Recommended', 'Prompt Doctor Review']
+        && data.recommendedSpecialist is string && data.recommendedSpecialist.size() >= 1 && data.recommendedSpecialist.size() <= 120
+        && data.numericMarkers is list && data.numericMarkers.size() <= 60
+        && (data.numericMarkers.size() == 0 || data.numericMarkers[0] is map)
+        && data.cultureFindings is list && data.cultureFindings.size() <= 15
+        && (data.cultureFindings.size() == 0 || data.cultureFindings[0] is map)
+        && data.patientNotes is string && data.patientNotes.size() <= 5000
+        && data.handoffStatus is string && data.handoffStatus in ['sent', 'under_review', 'completed']
+        && (!('doctorResponse' in data) || isValidDoctorResponse(data.doctorResponse))
+        && (!('attachment' in data) || isValidAttachment(data.attachment, data.patientUid))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['ownerId', 'reportId', 'role', 'content', 'timestampLabel', 'createdAt'])
+        && data.keys().hasOnly(['ownerId', 'reportId', 'role', 'content', 'timestampLabel', 'createdAt'])
+        && isValidId(data.ownerId)
+        && isValidId(data.reportId)
+        && data.role is string && data.role in ['user', 'assistant']
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 12000
+        && data.timestampLabel is string && data.timestampLabel.size() >= 1 && data.timestampLabel.size() <= 40
+        && data.createdAt is timestamp;
+    }
+
+    // --- Admin Registry (Server/Console Managed Only) ---
+    match /admins/{adminId} {
+      allow get: if isVerified();
+      allow list, write: if false;
+    }
+
+    // --- Clinician Private Profiles (PII / License Isolated) ---
+    match /doctors/{doctorId} {
+      allow get: if isVerified() && isValidId(doctorId) && (isOwner(doctorId) || isAdmin());
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(doctorId)
+        && isValidDoctorPrivateProfile(incoming())
+        && isOwner(doctorId)
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/doctor_directory/$(doctorId));
+      allow update: if isVerified()
+        && isValidId(doctorId)
+        && isValidDoctorPrivateProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isOwner(doctorId) || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'doctorName', 'specialty', 'clinicName', 'licenseNumber', 'acceptingCases', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    // --- Non-PII Clinician Directory ---
+    match /doctor_directory/{doctorId} {
+      allow get: if isVerified() && isValidId(doctorId);
+      allow list: if isVerified();
+      allow create: if isVerified()
+        && isValidId(doctorId)
+        && isValidDoctorDirectoryEntry(incoming())
+        && isOwner(doctorId)
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/doctors/$(doctorId));
+      allow update: if isVerified()
+        && isValidId(doctorId)
+        && isValidDoctorDirectoryEntry(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (isOwner(doctorId) || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'doctorName', 'specialty', 'clinicName', 'acceptingCases', 'updatedAt'
+        ]);
+      allow delete: if isVerified() && isValidId(doctorId) && (isOwner(doctorId) || isAdmin());
+    }
+
+    // --- Shared Clinical Review Handoffs ---
+    match /handoffs/{handoffId} {
+      allow get: if isVerified()
+        && isValidId(handoffId)
+        && (resource.data.patientUid == request.auth.uid || resource.data.assignedDoctorUid == request.auth.uid || isAdmin());
+      allow list: if isVerified()
+        && (resource.data.patientUid == request.auth.uid || resource.data.assignedDoctorUid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(handoffId)
+        && isValidClinicalHandoff(incoming())
+        && incoming().patientUid == request.auth.uid
+        && incoming().handoffStatus in ['sent', 'under_review']
+        && !('doctorResponse' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          incoming().assignedDoctorUid == request.auth.uid ||
+          exists(/databases/$(database)/documents/doctors/$(incoming().assignedDoctorUid))
+        );
+      allow update: if isVerified()
+        && isValidId(handoffId)
+        && isValidClinicalHandoff(incoming())
+        && incoming().patientUid == existing().patientUid
+        && incoming().reportId == existing().reportId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().handoffStatus != 'completed' || isAdmin())
+        && (
+          (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['patientNotes', 'assignedDoctorUid', 'handoffStatus', 'doctorResponse', 'updatedAt'])
+          ) || (
+            // Assigned registered doctor moves case to under_review
+            request.auth.uid == existing().assignedDoctorUid
+            && existing().handoffStatus in ['sent', 'under_review']
+            && incoming().handoffStatus == 'under_review'
+            && incoming().assignedDoctorUid == existing().assignedDoctorUid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['handoffStatus', 'updatedAt'])
+            && isRegisteredDoctor()
+          ) || (
+            // Assigned registered doctor publishes verified clinical response (terminal lock)
+            request.auth.uid == existing().assignedDoctorUid
+            && existing().handoffStatus in ['sent', 'under_review']
+            && incoming().handoffStatus == 'completed'
+            && 'doctorResponse' in incoming()
+            && incoming().assignedDoctorUid == existing().assignedDoctorUid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['handoffStatus', 'doctorResponse', 'updatedAt'])
+            && isRegisteredDoctor()
+          ) || (
+            // Patient updates symptom notes before review begins
+            request.auth.uid == existing().patientUid
+            && existing().handoffStatus == 'sent'
+            && incoming().handoffStatus in ['sent', 'under_review']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['patientNotes', 'assignedDoctorUid', 'handoffStatus', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerified() && isValidId(handoffId) && (resource.data.patientUid == request.auth.uid || isAdmin());
+    }
+
+    // --- User Profiles, Saved Reports & Chat History ---
+    match /users/{userId} {
+      allow get: if isVerified() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && isOwner(userId)
+        && incoming().uid == request.auth.uid
+        && incoming().role == 'patient'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'preferredLanguage', 'updatedAt'])
+          ) || (
+            isAdmin()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'preferredLanguage', 'updatedAt'])
+          )
+        );
+      allow delete: if false;
+
+      match /reports/{reportId} {
+        allow get: if isVerified() && isValidId(userId) && isValidId(reportId) && (isOwner(userId) || isAdmin());
+        allow list: if isVerified() && resource.data.ownerId == request.auth.uid;
+        allow create: if isVerified()
+          && isValidId(userId)
+          && isValidId(reportId)
+          && isValidLabReport(incoming())
+          && isOwner(userId)
+          && incoming().ownerId == request.auth.uid
+          && incoming().handoffStatus == 'idle'
+          && !('doctorResponse' in incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerified()
+          && isValidId(userId)
+          && isValidId(reportId)
+          && isValidLabReport(incoming())
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (existing().handoffStatus != 'completed' || isAdmin())
+          && (
+            (
+              isAdmin()
+              && incoming().diff(existing()).affectedKeys().hasOnly(['patientNotes', 'handoffStatus', 'doctorResponse', 'updatedAt'])
+            ) || (
+              isOwner(userId) && (
+                // Action: Patient submits handoff to external doctor
+                (
+                  existing().handoffStatus == 'idle'
+                  && incoming().handoffStatus in ['sent', 'under_review']
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['patientNotes', 'handoffStatus', 'updatedAt'])
+                ) ||
+                // Action: Advance sent -> under_review
+                (
+                  existing().handoffStatus in ['idle', 'sent']
+                  && incoming().handoffStatus == 'under_review'
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['handoffStatus', 'updatedAt'])
+                ) ||
+                // Action: Attach Cloud Storage file metadata
+                (
+                  'attachment' in incoming()
+                  && incoming().handoffStatus == existing().handoffStatus
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['attachment', 'updatedAt'])
+                ) ||
+                // Action: Publish verified doctor response (completes handoff)
+                (
+                  existing().handoffStatus in ['idle', 'sent', 'under_review']
+                  && incoming().handoffStatus == 'completed'
+                  && 'doctorResponse' in incoming()
+                  && incoming().diff(existing()).affectedKeys().hasOnly(['handoffStatus', 'doctorResponse', 'updatedAt'])
+                )
+              )
+            )
+          );
+        allow delete: if isVerified() && isValidId(userId) && isValidId(reportId) && (isOwner(userId) || isAdmin());
+
+        match /messages/{messageId} {
+          allow get: if isVerified() && isValidId(userId) && isValidId(reportId) && isValidId(messageId) && (isOwner(userId) || isAdmin());
+          allow list: if isVerified() && resource.data.ownerId == request.auth.uid;
+          allow create: if isVerified()
+            && isValidId(userId)
+            && isValidId(reportId)
+            && isValidId(messageId)
+            && isValidChatMessage(incoming())
+            && isOwner(userId)
+            && incoming().ownerId == request.auth.uid
+            && incoming().reportId == reportId
+            && incoming().createdAt == request.time
+            && get(/databases/$(database)/documents/users/$(userId)/reports/$(reportId)).data.ownerId == request.auth.uid;
+          allow update: if false;
+          allow delete: if isVerified() && isValidId(userId) && isValidId(reportId) && isValidId(messageId) && (isOwner(userId) || isAdmin());
+        }
+      }
+    }
+  }
+}

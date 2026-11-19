@@ -1,0 +1,499 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Signed-in patient account profile and language preference.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Optional profile avatar URL.",
+          "maxLength": 500
+        },
+        "role": {
+          "type": "string",
+          "description": "Account role.",
+          "enum": ["patient"]
+        },
+        "preferredLanguage": {
+          "type": "string",
+          "description": "Preferred UI and AI explanation language.",
+          "enum": ["en", "ta", "hi"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "photoURL",
+        "role",
+        "preferredLanguage",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DoctorPrivateProfile": {
+      "title": "DoctorPrivateProfile",
+      "description": "Private clinician account record including medical license number.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the clinician.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "doctorName": {
+          "type": "string",
+          "description": "Clinician full name and title.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "specialty": {
+          "type": "string",
+          "description": "Medical specialty.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "clinicName": {
+          "type": "string",
+          "description": "Hospital or clinic affiliation.",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "licenseNumber": {
+          "type": "string",
+          "description": "Private medical registration or license number.",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "acceptingCases": {
+          "type": "boolean",
+          "description": "Whether the clinician is accepting patient review handoffs."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the doctor profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the doctor profile was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "doctorName",
+        "specialty",
+        "clinicName",
+        "licenseNumber",
+        "acceptingCases",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DoctorDirectoryEntry": {
+      "title": "DoctorDirectoryEntry",
+      "description": "Non-PII clinician directory entry visible to signed-in patients for selecting a reviewing physician.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the clinician.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "doctorName": {
+          "type": "string",
+          "description": "Clinician full name and title.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "specialty": {
+          "type": "string",
+          "description": "Medical specialty.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "clinicName": {
+          "type": "string",
+          "description": "Hospital or clinic affiliation.",
+          "minLength": 1,
+          "maxLength": 150
+        },
+        "acceptingCases": {
+          "type": "boolean",
+          "description": "Whether the clinician is currently accepting handoff cases."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the directory entry was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the directory entry was last updated."
+        }
+      },
+      "required": [
+        "uid",
+        "doctorName",
+        "specialty",
+        "clinicName",
+        "acceptingCases",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "LabReport": {
+      "title": "LabReport",
+      "description": "Structured medical lab report analysis, visual marker bounds, culture findings, and doctor review handoff state.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the user who owns this lab report.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "presetKey": {
+          "type": "string",
+          "description": "Optional preset identifier or empty string.",
+          "maxLength": 64
+        },
+        "title": {
+          "type": "string",
+          "description": "Concise title of the lab report.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reportDate": {
+          "type": "string",
+          "description": "Display date of the lab report.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "patientLabel": {
+          "type": "string",
+          "description": "Non-PII specimen or panel descriptor.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summaryBullets": {
+          "type": "object",
+          "description": "Multilingual big-picture summary bullets keyed by en, ta, hi."
+        },
+        "priority": {
+          "type": "string",
+          "description": "Triage priority level.",
+          "enum": ["Routine", "Follow-Up Recommended", "Prompt Doctor Review"]
+        },
+        "priorityReason": {
+          "type": "object",
+          "description": "Multilingual rationale for the priority level."
+        },
+        "recommendedSpecialist": {
+          "type": "string",
+          "description": "Suggested medical specialist.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "specialistRationale": {
+          "type": "object",
+          "description": "Multilingual explanation for the specialist recommendation."
+        },
+        "numericMarkers": {
+          "type": "array",
+          "description": "Extracted numeric lab markers with reference and display bounds."
+        },
+        "cultureFindings": {
+          "type": "array",
+          "description": "Extracted microbiology culture and antibiotic susceptibility results."
+        },
+        "rawReportText": {
+          "type": "string",
+          "description": "Source or extracted lab report text.",
+          "maxLength": 50000
+        },
+        "sourceType": {
+          "type": "string",
+          "description": "Input source type.",
+          "enum": ["preset", "text", "file"]
+        },
+        "patientNotes": {
+          "type": "string",
+          "description": "Optional symptom or context notes written by the patient for the reviewing doctor.",
+          "maxLength": 5000
+        },
+        "handoffStatus": {
+          "type": "string",
+          "description": "Current doctor review handoff workflow status.",
+          "enum": ["idle", "sent", "under_review", "completed"]
+        },
+        "doctorResponse": {
+          "type": "object",
+          "description": "Verified clinician review note once completed."
+        },
+        "attachment": {
+          "type": "object",
+          "description": "Optional Cloud Storage file metadata for the uploaded lab report PDF or image."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the report was saved."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the report was last updated."
+        }
+      },
+      "required": [
+        "ownerId",
+        "presetKey",
+        "title",
+        "reportDate",
+        "patientLabel",
+        "summaryBullets",
+        "priority",
+        "priorityReason",
+        "recommendedSpecialist",
+        "specialistRationale",
+        "numericMarkers",
+        "cultureFindings",
+        "rawReportText",
+        "sourceType",
+        "patientNotes",
+        "handoffStatus",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ClinicalHandoff": {
+      "title": "ClinicalHandoff",
+      "description": "De-identified lab report review case routed between a patient and an assigned external doctor.",
+      "type": "object",
+      "properties": {
+        "patientUid": {
+          "type": "string",
+          "description": "UID of the patient submitting the review request.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignedDoctorUid": {
+          "type": "string",
+          "description": "UID of the assigned reviewing doctor.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reportId": {
+          "type": "string",
+          "description": "Source lab report ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Lab report title.",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reportDate": {
+          "type": "string",
+          "description": "Report date label.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "patientLabel": {
+          "type": "string",
+          "description": "Non-PII specimen or panel descriptor.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "priority": {
+          "type": "string",
+          "description": "Triage priority level.",
+          "enum": ["Routine", "Follow-Up Recommended", "Prompt Doctor Review"]
+        },
+        "recommendedSpecialist": {
+          "type": "string",
+          "description": "Suggested medical specialist.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "numericMarkers": {
+          "type": "array",
+          "description": "Structured numeric markers for rapid clinician triage."
+        },
+        "cultureFindings": {
+          "type": "array",
+          "description": "Structured microbiology culture findings."
+        },
+        "patientNotes": {
+          "type": "string",
+          "description": "Symptom and context notes provided by the patient.",
+          "maxLength": 5000
+        },
+        "handoffStatus": {
+          "type": "string",
+          "description": "Current review status.",
+          "enum": ["sent", "under_review", "completed"]
+        },
+        "doctorResponse": {
+          "type": "object",
+          "description": "Verified clinical assessment published by the assigned doctor."
+        },
+        "attachment": {
+          "type": "object",
+          "description": "Optional Cloud Storage file metadata for the uploaded lab report PDF or image."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the handoff was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the handoff was last updated."
+        }
+      },
+      "required": [
+        "patientUid",
+        "assignedDoctorUid",
+        "reportId",
+        "title",
+        "reportDate",
+        "patientLabel",
+        "priority",
+        "recommendedSpecialist",
+        "numericMarkers",
+        "cultureFindings",
+        "patientNotes",
+        "handoffStatus",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Report-aware AI Care & Doctor Prep conversation message.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the patient who owns the parent lab report.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reportId": {
+          "type": "string",
+          "description": "Document ID of the parent lab report.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Message sender role.",
+          "enum": ["user", "assistant"]
+        },
+        "content": {
+          "type": "string",
+          "description": "Message body text.",
+          "minLength": 1,
+          "maxLength": 12000
+        },
+        "timestampLabel": {
+          "type": "string",
+          "description": "Formatted local display time label.",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the message was created."
+        }
+      },
+      "required": [
+        "ownerId",
+        "reportId",
+        "role",
+        "content",
+        "timestampLabel",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Owner-isolated user profile documents."
+    },
+    "/users/{userId}/reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/LabReport"
+      },
+      "description": "Saved lab report analyses and doctor review handoffs owned by a user."
+    },
+    "/users/{userId}/reports/{reportId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/ChatMessage"
+      },
+      "description": "AI Care & Doctor Prep conversation messages scoped to a saved lab report."
+    },
+    "/doctors/{doctorId}": {
+      "schema": {
+        "$ref": "#/entities/DoctorPrivateProfile"
+      },
+      "description": "Owner-isolated clinician credentials and license details."
+    },
+    "/doctor_directory/{doctorId}": {
+      "schema": {
+        "$ref": "#/entities/DoctorDirectoryEntry"
+      },
+      "description": "Non-PII clinician directory entries for routing patient review handoffs."
+    },
+    "/handoffs/{handoffId}": {
+      "schema": {
+        "$ref": "#/entities/ClinicalHandoff"
+      },
+      "description": "De-identified clinical handoff queue shared strictly between submitting patient and assigned reviewing doctor."
+    }
+  }
+}

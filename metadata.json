@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix MediGuide AI",
+  "description": "Trustworthy medical lab report explainer, multilingual health navigator, and external doctor review handoff portal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
